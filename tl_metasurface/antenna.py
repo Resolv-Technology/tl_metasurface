@@ -8,14 +8,14 @@ Z_0 = np.sqrt(MU_0/EPS_0)
 
 class Antenna():
 
-    def __init__(self, element, f, Lx, delta_x):
+    def __init__(self, element, f, Lz, delta_z):
         
         self.params = {}
         self.element = element
         
         self.params['f'] = f
-        self.params['Lx'] = Lx
-        self.params['delta_x'] = delta_x
+        self.params['Lz'] = Lz
+        self.params['delta_z'] = delta_z
 
         self.calculate_parameters()
 
@@ -36,14 +36,14 @@ class Antenna():
     
 class RectangularWaveguide(Antenna):
     
-    def __init__(self, element, f, Lx, delta_x, a, b, **kwargs):
+    def __init__(self, element, f, Lz, delta_z, a, b, **kwargs):
         
         self.params = {}
         self.element = element
         
         self.params['f'] = f
-        self.params['Lx'] = Lx
-        self.params['delta_x'] = delta_x
+        self.params['Lz'] = Lz
+        self.params['delta_z'] = delta_z
         self.params['a'] = a
         self.params['b'] = b
         self.params['m'] = kwargs.get('m', 1)
@@ -70,9 +70,9 @@ class RectangularWaveguide(Antenna):
 
 class SIW(RectangularWaveguide):
 
-    def __init__(self, element, f, Lx, delta_x, a, b, via_pitch, via_diameter, **kwargs):
+    def __init__(self, element, f, Lz, delta_z, a, b, via_pitch, via_diameter, **kwargs):
 
         a = a - 1.08 * (via_diameter**2)/via_pitch + 0.1 * (via_diameter**2)/a
-        super().__init__(element, f, Lx, delta_x, a, b, **kwargs)
+        super().__init__(element, f, Lz, delta_z, a, b, **kwargs)
         self.params['via_pitch'] = via_pitch
         self.params['via_diameter'] = via_diameter

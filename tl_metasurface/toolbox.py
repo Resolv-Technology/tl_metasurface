@@ -1,7 +1,7 @@
 from matplotlib import pyplot as plt
 import pickle
 
-def set_font(fontsize=18, font="Times New Roman"):
+def set_font(fontsize=15, font="Times New Roman"):
     '''Sets font and fontsize for all matplotlib plots.'''
     rc = {"font.size" : fontsize,
     "font.family" : font,
