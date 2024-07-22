@@ -8,16 +8,25 @@ Z_0 = np.sqrt(MU_0/EPS_0)
 
 class Antenna():
 
-    def __init__(self, element, f, Lz, delta_z):
+    def __init__(self, element, f, Lz, delta_z, *args, **kwargs):
         
-        self.params = {}
-        self.element = element
-        
-        self.params['f'] = f
-        self.params['Lz'] = Lz
-        self.params['delta_z'] = delta_z
-
+        self.params = locals()
+        self.params.pop('self')
+        self.params.pop('element')
         self.calculate_parameters()
+
+        self.element = element
+        if self.element is not None:
+            if self.element.alpha_m is None:
+                alpha_mx = (1j*self.params['a']*self.params['b']*self.params['beta_g']) / (2*self.params['k']) * (self.element.S21 + self.element.S11 - 1)
+                alpha_ey = (1j*self.params['a']*self.params['b']) / (2*self.params['beta_g']) * (self.element.S21 + self.element.S11 - 1)
+                self.element.alpha_m = np.stack((alpha_mx, np.zeros_like(alpha_mx), np.zeros_like(alpha_mx)), axis=1)
+                self.element.alpha_e = np.stack((np.zeros_like(alpha_ey), alpha_ey, np.zeros_like(alpha_ey)), axis=1)
+            elif self.element.S21 is None:
+                self.element.S21 = ( 1 - 1j*(self.params['k']**2*self.element.alpha_e[:,1])/(self.params['a']*self.params['b']*self.params['beta_g'])
+                                       - 1j*(self.params['beta_g']*self.element.alpha_m[:,0])/(self.params['a']*self.params['b']) )
+                self.element.S11 = ( - 1j*(self.params['k']**2*self.element.alpha_e[:,1])/(self.params['a']*self.params['b']*self.params['beta_g'])
+                                     + 1j*(self.params['beta_g']*self.element.alpha_m[:,0])/(self.params['a']*self.params['b']) )
 
     def compute_fields(self, tuning_state):
         print('TBD')
@@ -38,23 +47,16 @@ class RectangularWaveguide(Antenna):
     
     def __init__(self, element, f, Lz, delta_z, a, b, **kwargs):
         
-        self.params = {}
-        self.element = element
-        
-        self.params['f'] = f
-        self.params['Lz'] = Lz
-        self.params['delta_z'] = delta_z
-        self.params['a'] = a
-        self.params['b'] = b
+        super().__init__(element, f, Lz, delta_z, a, b, **kwargs)
+
+    def calculate_parameters(self):
+
+        kwargs = self.params.pop('kwargs')
         self.params['m'] = kwargs.get('m', 1)
         self.params['n'] = kwargs.get('n', 0)
         self.params['epsilon_r'] = kwargs.get('epsilon_r', 1)
         self.params['tan_delta'] = kwargs.get('tan_delta', 0)
         self.params['sigma_wall'] = kwargs.get('sigma_wall', 0)
-
-        self.calculate_parameters()
-
-    def calculate_parameters(self):
 
         self.params['omega'] = 2*np.pi * self.params['f']
         self.params['k'] = self.params['omega'] * np.sqrt(MU_0*EPS_0*self.params['epsilon_r'])
@@ -73,6 +75,4 @@ class SIW(RectangularWaveguide):
     def __init__(self, element, f, Lz, delta_z, a, b, via_pitch, via_diameter, **kwargs):
 
         a = a - 1.08 * (via_diameter**2)/via_pitch + 0.1 * (via_diameter**2)/a
-        super().__init__(element, f, Lz, delta_z, a, b, **kwargs)
-        self.params['via_pitch'] = via_pitch
-        self.params['via_diameter'] = via_diameter
+        super().__init__(element, f, Lz, delta_z, a, b, via_pitch, via_diameter, **kwargs)

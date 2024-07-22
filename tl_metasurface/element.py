@@ -3,7 +3,7 @@ from matplotlib import pyplot as plt
 import skrf as rf
 import scipy.constants
 import scipy.io
-import toolbox as tb
+from tl_metasurface import toolbox as tb
 tb.set_font()
 
 C = scipy.constants.c
@@ -17,36 +17,42 @@ class Element:
     args:
         filepath: path to Touchstone file
         alpha: polarizability vector vs. frequency. By default, assigns
-        f: frequency vector
+        f: operating frequency
         f0: resonance frequency vector
     kwargs:
         rotation: rotation of element polarization (default: 0)
     '''
 
-    def __init__(self, filepath=None, alpha_m=None, alpha_e=None, f=None, f0=None, **kwargs):
+    def __init__(self, filepath_list=None, f=None, alpha_m=None, alpha_e=None, f0=None, **kwargs):
         self.quiet = kwargs.get('quiet', False)
 
         self.rotation = kwargs.get('rotation', 0)
 
-        if filepath is not None:
-            filetype = filepath.split('.')[-1]
-            if filetype == 's2p' or filetype == 's3p':
-                touchstone = rf.Network(filepath)
-                self.S21 = touchstone.s21
-                self.S11 = touchstone.s11
-                self.f = touchstone.f
-            else:
-                raise ValueError('Filetype not supported. Must supply Touchstone file.')
+        self.f = f
+        if self.f is None:
+            if not self.quiet:
+                print('No frequency vector provided, defaulting to 10 GHz')
+            self.f = 10E9
+        
+        if filepath_list is not None:
+            self.S21 = []
+            self.S11 = []
+            for filepath in filepath_list:
+                filetype = filepath.split('.')[-1]
+                if filetype == 's2p' or filetype == 's3p':
+                    touchstone = rf.Network(filepath)
+                    f_index = np.argmin(np.abs(touchstone.f - self.f))
+                    self.S21.append(touchstone.s21.s[f_index,0,0])
+                    self.S11.append(touchstone.s11.s[f_index,0,0])
+                else:
+                    raise ValueError('Filetype not supported. Must supply Touchstone file.')
+            self.S21 = np.array(self.S21)
+            self.S11 = np.array(self.S11)
         
         else:
-            self.f = f
-            if self.f is None:
-                if not self.quiet:
-                    print('No frequency vector provided, defaulting to 10 GHz')
-                self.f = 10E9
-
+            self.f0 = f0
             if alpha_m is None:
-                if f0 is None:
+                if self.f0 is None:
                     self.f0 = np.linspace(self.f - 0.1*self.f, 
                                         self.f + 0.1*self.f, 
                                         101)
