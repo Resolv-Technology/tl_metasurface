@@ -15,12 +15,15 @@ class Element:
     Defines element for antenna construction.
 
     args:
-        filepath: path to Touchstone file
-        alpha: polarizability vector vs. frequency. By default, assigns
+        filepath_list: list of paths to Touchstone files. Should provide a Touchstone file for each tuning state.
+        alpha: polarizability vector vs. tuning state. By default, assigns polarizability according to a Lorentzian distribution.
         f: operating frequency
         f0: resonance frequency vector
     kwargs:
         rotation: rotation of element polarization (default: 0)
+        quiet: suppresses print statements (default: False)
+        F: Lorentzian amplitude (default: 1)
+        Q: Lorentzian quality factor (default: 20)
     '''
 
     def __init__(self, filepath_list=None, f=None, alpha_m=None, alpha_e=None, f0=None, **kwargs):
@@ -35,20 +38,33 @@ class Element:
             self.f = 10E9
         
         if filepath_list is not None:
-            self.S21 = []
             self.S11 = []
+            self.S12 = []
+            self.S21 = []
+            self.S22 = []
             for filepath in filepath_list:
                 filetype = filepath.split('.')[-1]
                 if filetype == 's2p' or filetype == 's3p':
                     touchstone = rf.Network(filepath)
                     f_index = np.argmin(np.abs(touchstone.f - self.f))
-                    self.S21.append(touchstone.s21.s[f_index,0,0])
                     self.S11.append(touchstone.s11.s[f_index,0,0])
+                    self.S21.append(touchstone.s21.s[f_index,0,0])
+                    try:
+                        self.S12.append(touchstone.s12.s[f_index,0,0])
+                        self.S22.append(touchstone.s22.s[f_index,0,0])
+                    except:
+                        self.S12.append(touchstone.s21.s[f_index,0])
+                        self.S22.append(touchstone.s11.s[f_index,0])
                 else:
                     raise ValueError('Filetype not supported. Must supply Touchstone file.')
-            self.S21 = np.array(self.S21)
             self.S11 = np.array(self.S11)
-        
+            self.S12 = np.array(self.S12)
+            self.S21 = np.array(self.S21)
+            self.S22 = np.array(self.S22)
+            self.S = np.stack((self.S11, self.S12, self.S21, self.S22), axis=1)
+            self.S = np.transpose(np.array([[self.S11, self.S12], [self.S21, self.S22]]), (2, 0, 1))
+            self.alpha_m = None
+            self.alpha_e = None
         else:
             self.f0 = f0
             if alpha_m is None:
@@ -69,6 +85,10 @@ class Element:
                 self.alpha_m = np.stack((alpha_m, np.zeros_like(alpha_m), np.zeros_like(alpha_m)), axis=1)
             if alpha_e.ndim == 1:
                 self.alpha_e = np.stack((np.zeros_like(alpha_e), alpha_e, np.zeros_like(alpha_e)), axis=1)
+            self.S11 = None
+            self.S12 = None
+            self.S21 = None
+            self.S22 = None
 
     def plot_alpha(self, plot_dict=None, dipole_type='magnetic', component='x'):
         if plot_dict is None:
