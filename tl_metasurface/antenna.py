@@ -153,6 +153,8 @@ class RectangularWaveguide(Antenna):
                 self.element.S12 = self.element.S21
                 self.element.S22 = self.element.S11
                 self.element.S = np.transpose(np.array([[self.element.S11, self.element.S12], [self.element.S21, self.element.S22]]), (2, 0, 1))
+
+        self.element.rotate()
         
         self.element.x_offset = kwargs.get('x_offset', 0)
         if np.array(self.element.x_offset).ndim == 0:

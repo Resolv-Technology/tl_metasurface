@@ -21,7 +21,7 @@ class Element:
         f0: resonance frequency vector
         delta_z_element: element size/deembed length (default: 0)
     kwargs:
-        rotation: rotation of element polarization (default: 0)
+        rotation: rotation of element polarization in degrees (default: 0)
         quiet: suppresses print statements (default: False)
         F: Lorentzian amplitude (default: 1)
         Q: Lorentzian quality factor (default: 20)
@@ -31,7 +31,7 @@ class Element:
         self.quiet = kwargs.get('quiet', False)
 
         self.rotation = kwargs.get('rotation', 0)
-        self.delta_z_element = delta_z_element
+        self.delta_z_element = delta_z_element          # Element size/deembed length
 
         self.f = f
         if self.f is None:
@@ -96,6 +96,15 @@ class Element:
             self.S12 = None
             self.S21 = None
             self.S22 = None
+
+    def rotate(self):
+        '''Rotates element polarizability tensors around the y axis by angle self.rotation.'''
+        theta = np.radians(self.rotation)
+        R = np.array([[np.cos(theta), 0, np.sin(theta)],
+                        [0, 1, 0],
+                        [-np.sin(theta), 0, np.cos(theta)]])
+        self.alpha_m = R @ self.alpha_m @ R.T
+        self.alpha_e = R @ self.alpha_e @ R.T
 
     def plot_alpha(self, plot_dict=None, dipole_type='magnetic', component='x'):
         if plot_dict is None:
