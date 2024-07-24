@@ -17,23 +17,23 @@ class Antenna():
         delta_z: antenna element spacing
     '''
 
-    def __init__(self, element, f, Lz, delta_z):
+    def __init__(self, element, f, Lz, delta_z=None, N=None):
         
         self.params['f'] = f
         self.params['Lz'] = Lz
         self.params['delta_z'] = delta_z
+        self.params['N'] = N
+        if self.params['delta_z'] is None:
+            self.params['delta_z'] = Lz / N
+        elif self.params['N'] is None:
+            self.params['N'] = int(Lz / delta_z)
+        self.z = np.linspace(0, Lz, self.params['N'])
         self.calculate_parameters()
 
         self.element = element
 
-    def make_element_ABCD(self):
-        A = ( (1 + self.element.S11)*(1 - self.element.S22) + self.element.S12*self.element.S21 ) / (2*self.element.S21) 
-        B = self.params['Z'] * ( (1 + self.element.S11)*(1 + self.element.S22) - self.element.S12*self.element.S21 ) / (2*self.element.S21)
-        C = 1 / self.params['Z'] * ( (1 - self.element.S11)*(1 - self.element.S22) - self.element.S12*self.element.S21 ) / (2*self.element.S21)
-        D = ( (1 - self.element.S11)*(1 + self.element.S22) + self.element.S12*self.element.S21 ) / (2*self.element.S21)
-        self.element.A = np.transpose(np.array([[A, B], [C, D]]), (2, 0, 1))
-
     def make_ABCD(self, S):
+        '''Converts scattering matrix to ABCD matrix.'''
         A = ( (1 + S[:,0,0])*(1 - S[:,1,1]) + S[:,0,1]*S[:,1,0] ) / (2*S[:,1,0]) 
         B = self.params['Z'] * ( (1 + S[:,0,0])*(1 + S[:,1,1]) - S[:,0,1]*S[:,1,0] ) / (2*S[:,1,0])
         C = 1 / self.params['Z'] * ( (1 - S[:,0,0])*(1 - S[:,1,1]) - S[:,0,1]*S[:,1,0] ) / (2*S[:,1,0])
@@ -41,6 +41,7 @@ class Antenna():
         return np.transpose(np.array([[A, B], [C, D]]), (2, 0, 1))
     
     def make_S(self, A):
+        '''Converts ABCD matrix to scattering matrix.'''
         denominator = A[:,0,0] + A[:,0,1]/self.params['Z'] + A[:,1,0]*self.params['Z'] + A[:,1,1]
         S11 = (A[:,0,0] + A[:,0,1]/self.params['Z'] - A[:,1,0]*self.params['Z'] - A[:,1,1]) / denominator
         S12 = 2 * (A[:,0,0]*A[:,1,1] - A[:,0,1]*A[:,1,0]) / denominator
@@ -48,8 +49,50 @@ class Antenna():
         S22 = (-A[:,0,0] + A[:,0,1]/self.params['Z'] - A[:,1,0]*self.params['Z'] + A[:,1,1]) / denominator
         return np.transpose(np.array([[S11, S12], [S21, S22]]), (2, 0, 1))
 
-    def compute_fields(self, tuning_state):
-        return
+    def compute_fields(self, tuning_state, feed_position='left'):
+        '''
+        Calculates electric and magnetic fields for each element in the antenna array using a cascaded ABCD matrix approach.
+
+        args:
+            tuning_state: array of tuning states for each element. Defined as length N vector of integers indexing S and alpha matrices.
+            feed_position: position of feed ('left', 'right', 'both', or 'center'. default: 'left')
+        '''
+        if feed_position == 'left':
+            Ai = np.empty((self.params['N'], 2, 2), dtype=complex)
+            Sn_plus = np.empty((self.params['N'], 2, 2), dtype=complex)
+            Sn_minus = np.empty((self.params['N'], 2, 2), dtype=complex)
+            for i in range(self.params['N']):
+                Ai[i,:,:] = self.A0 @ self.element.A[tuning_state[i],:,:]   # make Ai_tilde for each element depending on tuning state
+
+            for n in range(self.params['N']):
+                if n == 0:
+                    An = self.A0
+                else:
+                    An = np.eye(2)
+                    for i in range(n-1):
+                        An = An @ Ai[i,:,:]
+                    An = An @ self.A0
+                Sn_plus[n,:,:] = self.make_S(An[None,:,:])[0,:,:]
+
+                An = np.eye(2)
+                for i in range(n, self.params['N']):
+                    An = An @ Ai[i,:,:]
+                Sn_minus[n,:,:] = self.make_S(An[None,:,:])[0,:,:]
+
+            V_plus = Sn_plus[:,1,0]
+            V_minus = V_plus * Sn_minus[:,0,0]
+            C_10 = V_plus + V_minus
+            Ey = -1j*self.params['omega'] * MU_0 * np.pi / (self.params['k_c']**2 * self.params['a']) * np.sin(np.pi*self.element.x/ self.params['a']) * C_10
+            Hx = 1j*self.params['beta_g'] * np.pi / (self.params['k_c']**2 * self.params['a']) * np.sin(np.pi*self.element.x/ self.params['a']) * C_10
+            Hz = np.cos(np.pi*self.element.x/ self.params['a']) * C_10
+            self.E = np.stack((np.zeros_like(Ey), Ey, np.zeros_like(Ey)), axis=1)
+            self.H = np.stack((Hx, np.zeros_like(Hx), Hz), axis=1)          
+
+    def compute_dipoles(self, tuning_state):
+        self.m_e = self.element.alpha_e[tuning_state,:,:] @ self.E[:,:,None]
+        self.m_m = self.element.alpha_m[tuning_state,:,:] @ self.H[:,:,None]
+        self.m_e = self.m_e[:,:,0]
+        self.m_m = self.m_m[:,:,0]
     
     def calculate_parameters(self):
         return
@@ -81,7 +124,7 @@ class RectangularWaveguide(Antenna):
         sigma_wall: conductivity of waveguide walls (default: 1E7)
     '''
     
-    def __init__(self, element, f, Lz, delta_z, a, b, **kwargs):
+    def __init__(self, element, f, Lz, a, b, delta_z=None, N=None, **kwargs):
         
         self.params = locals()
         self.params.pop('self')
@@ -93,20 +136,33 @@ class RectangularWaveguide(Antenna):
             if self.element.alpha_m is None:
                 alpha_mx = (1j*self.params['a']*self.params['b']*self.params['beta_g']) / (2*self.params['k']) * (self.element.S21 + self.element.S11 - 1)
                 alpha_ey = (1j*self.params['a']*self.params['b']) / (2*self.params['beta_g']) * (self.element.S21 + self.element.S11 - 1)
-                self.element.alpha_m = np.stack((alpha_mx, np.zeros_like(alpha_mx), np.zeros_like(alpha_mx)), axis=1)
-                self.element.alpha_e = np.stack((np.zeros_like(alpha_ey), alpha_ey, np.zeros_like(alpha_ey)), axis=1)
+                self.element.alpha_m = np.array([[alpha_mx, np.zeros_like(alpha_mx), np.zeros_like(alpha_mx)],
+                                                 [np.zeros_like(alpha_mx), np.zeros_like(alpha_mx), np.zeros_like(alpha_mx)],
+                                                 [np.zeros_like(alpha_mx), np.zeros_like(alpha_mx), np.zeros_like(alpha_mx)]])
+                self.element.alpha_m = np.transpose(self.element.alpha_m, (2, 0, 1))
+                self.element.alpha_e = np.stack([[np.zeros_like(alpha_ey), np.zeros_like(alpha_ey), np.zeros_like(alpha_ey)],
+                                                 [np.zeros_like(alpha_ey), alpha_ey, np.zeros_like(alpha_ey)],
+                                                 [np.zeros_like(alpha_ey), np.zeros_like(alpha_ey), np.zeros_like(alpha_ey)]])
+                self.element.alpha_e = np.transpose(self.element.alpha_e, (2, 0, 1))
+
             elif self.element.S21 is None:
-                self.element.S11 = ( - 1j*(self.params['k']**2*self.element.alpha_e[:,1])/(self.params['a']*self.params['b']*self.params['beta_g'])
-                                     + 1j*(self.params['beta_g']*self.element.alpha_m[:,0])/(self.params['a']*self.params['b']) )
-                self.element.S21 = ( 1 - 1j*(self.params['k']**2*self.element.alpha_e[:,1])/(self.params['a']*self.params['b']*self.params['beta_g'])
-                                       - 1j*(self.params['beta_g']*self.element.alpha_m[:,0])/(self.params['a']*self.params['b']) )
+                self.element.S11 = ( - 1j*(self.params['k']**2*self.element.alpha_e[:,1,1])/(self.params['a']*self.params['b']*self.params['beta_g'])
+                                     + 1j*(self.params['beta_g']*self.element.alpha_m[:,0,0])/(self.params['a']*self.params['b']) )
+                self.element.S21 = ( 1 - 1j*(self.params['k']**2*self.element.alpha_e[:,1,1])/(self.params['a']*self.params['b']*self.params['beta_g'])
+                                       - 1j*(self.params['beta_g']*self.element.alpha_m[:,0,0])/(self.params['a']*self.params['b']) )
                 self.element.S12 = self.element.S21
                 self.element.S22 = self.element.S11
-                self.element.S = np.stack((self.element.S11, self.element.S12, self.element.S21, self.element.S22), axis=1)
+                self.element.S = np.transpose(np.array([[self.element.S11, self.element.S12], [self.element.S21, self.element.S22]]), (2, 0, 1))
+        
+        self.element.x_offset = kwargs.get('x_offset', 0)
+        if np.array(self.element.x_offset).ndim == 0:
+            self.element.x_offset = self.element.x_offset * np.ones(self.params['N'])
+        self.element.x = self.params['a']/2 + self.element.x_offset
 
         self.element.A = self.make_ABCD(self.element.S)
-        self.A0 = np.array([[np.cosh(self.params['gamma']*self.params['delta_z']), self.params['Z']*np.sinh(self.params['gamma']*self.params['delta_z'])],
-                            [1/self.params['Z']*np.sinh(self.params['gamma']*self.params['delta_z']), np.cosh(self.params['gamma']*self.params['delta_z'])]])
+        delta_z0 = self.params['delta_z'] - self.element.delta_z_element        # defining distance between elements for general nonzero element size
+        self.A0 = np.array([[np.cosh(self.params['gamma']*delta_z0), self.params['Z']*np.sinh(self.params['gamma']*delta_z0)],
+                            [1/self.params['Z']*np.sinh(self.params['gamma']*delta_z0), np.cosh(self.params['gamma']*delta_z0)]])
                 
     def calculate_parameters(self):
 
@@ -117,11 +173,17 @@ class RectangularWaveguide(Antenna):
         self.params['tan_delta'] = kwargs.get('tan_delta', 0)
         self.params['sigma_wall'] = kwargs.get('sigma_wall', 1E7)
 
+        if self.params['delta_z'] is None:
+            self.params['delta_z'] = self.params['Lz'] / self.params['N']
+        elif self.params['N'] is None:
+            self.params['N'] = int(self.params['Lz'] / self.params['delta_z'])
+        self.z = np.linspace(0, self.params['Lz'], self.params['N'])
         self.params['omega'] = 2*np.pi * self.params['f']
         self.params['k'] = self.params['omega'] * np.sqrt(MU_0*EPS_0*self.params['epsilon_r'])
         self.params['lambda'] = 2*np.pi / self.params['k']
         self.params['beta_g'] = np.sqrt(self.params['k']**2 - (np.pi*self.params['m']/self.params['a'])**2 - (np.pi*self.params['n']/self.params['b'])**2)
         self.params['lambda_g'] = 2*np.pi / self.params['beta_g']
+        self.params['k_c'] = np.sqrt(self.params['k']**2 - self.params['beta_g']**2)
         self.params['f_c'] = 1/(2 * np.sqrt(MU_0*EPS_0*self.params['epsilon_r'])) * np.sqrt((self.params['m']/self.params['a'])**2 + (self.params['n']/self.params['b'])**2)
         self.params['R_s'] = np.sqrt(self.params['omega']*MU_0 / (2*self.params['sigma_wall']))
         self.params['alpha_d'] = self.params['k']**2 * self.params['tan_delta'] / (2 * self.params['beta_g'])
@@ -153,9 +215,9 @@ class SIW(RectangularWaveguide):
         sigma_wall: conductivity of waveguide walls (default: 1E7)
     '''
 
-    def __init__(self, element, f, Lz, delta_z, a, b, via_pitch, via_diameter, **kwargs):
+    def __init__(self, element, f, Lz, a, b, via_pitch, via_diameter, delta_z=None, N=None, **kwargs):
 
         a = a - 1.08 * (via_diameter**2)/via_pitch + 0.1 * (via_diameter**2)/a
-        super().__init__(element, f, Lz, delta_z, a, b, **kwargs)
+        super().__init__(element, f, Lz, a, b, delta_z, N, **kwargs)
         self.params['via_pitch'] = via_pitch
         self.params['via_diameter'] = via_diameter

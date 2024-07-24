@@ -17,8 +17,9 @@ class Element:
     args:
         filepath_list: list of paths to Touchstone files. Should provide a Touchstone file for each tuning state.
         alpha: polarizability vector vs. tuning state. By default, assigns polarizability according to a Lorentzian distribution.
-        f: operating frequency
+        f: operating frequency (default: 10 GHz)
         f0: resonance frequency vector
+        delta_z_element: element size/deembed length (default: 0)
     kwargs:
         rotation: rotation of element polarization (default: 0)
         quiet: suppresses print statements (default: False)
@@ -26,10 +27,11 @@ class Element:
         Q: Lorentzian quality factor (default: 20)
     '''
 
-    def __init__(self, filepath_list=None, f=None, alpha_m=None, alpha_e=None, f0=None, **kwargs):
+    def __init__(self, filepath_list=None, f=None, alpha_m=None, alpha_e=None, f0=None, delta_z_element=0, x_offset=0, **kwargs):
         self.quiet = kwargs.get('quiet', False)
 
         self.rotation = kwargs.get('rotation', 0)
+        self.delta_z_element = delta_z_element
 
         self.f = f
         if self.f is None:
@@ -61,7 +63,6 @@ class Element:
             self.S12 = np.array(self.S12)
             self.S21 = np.array(self.S21)
             self.S22 = np.array(self.S22)
-            self.S = np.stack((self.S11, self.S12, self.S21, self.S22), axis=1)
             self.S = np.transpose(np.array([[self.S11, self.S12], [self.S21, self.S22]]), (2, 0, 1))
             self.alpha_m = None
             self.alpha_e = None
@@ -82,9 +83,15 @@ class Element:
                 alpha_e = np.zeros_like(alpha_m)
             
             if alpha_m.ndim == 1:
-                self.alpha_m = np.stack((alpha_m, np.zeros_like(alpha_m), np.zeros_like(alpha_m)), axis=1)
+                self.alpha_m = np.array([[alpha_m, np.zeros_like(alpha_m), np.zeros_like(alpha_m)],
+                                                 [np.zeros_like(alpha_m), np.zeros_like(alpha_m), np.zeros_like(alpha_m)],
+                                                 [np.zeros_like(alpha_m), np.zeros_like(alpha_m), np.zeros_like(alpha_m)]])
+                self.alpha_m = np.transpose(self.alpha_m, (2, 0, 1))
             if alpha_e.ndim == 1:
-                self.alpha_e = np.stack((np.zeros_like(alpha_e), alpha_e, np.zeros_like(alpha_e)), axis=1)
+                self.alpha_e = np.stack([[np.zeros_like(alpha_e), np.zeros_like(alpha_e), np.zeros_like(alpha_e)],
+                                                 [np.zeros_like(alpha_e), alpha_e, np.zeros_like(alpha_e)],
+                                                 [np.zeros_like(alpha_e), np.zeros_like(alpha_e), np.zeros_like(alpha_e)]])
+                self.alpha_e = np.transpose(self.alpha_e, (2, 0, 1))
             self.S11 = None
             self.S12 = None
             self.S21 = None
