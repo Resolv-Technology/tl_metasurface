@@ -58,7 +58,8 @@ class Antenna():
 
         for n in range(indices.size):
             if n == 0:
-                An = self.A0
+                # An = self.A0
+                An = np.eye(2)
             else:
                 An = np.eye(2)
                 for i in range(n-1):
@@ -80,6 +81,21 @@ class Antenna():
         E = np.stack((np.zeros_like(Ey), Ey, np.zeros_like(Ey)), axis=1)
         H = np.stack((Hx, np.zeros_like(Hx), Hz), axis=1)
         return E, H
+    
+    def compute_antenna_S(self, tuning_state):
+        '''Calculates scattering matrix for antenna array.'''
+        indices = np.arange(self.params['N'])
+        Ai = np.empty((indices.size, 2, 2), dtype=complex)
+        for i in range(indices.size):
+            Ai[i,:,:] = self.A0 @ self.element.A[tuning_state[indices[i]],:,:]   # make Ai_tilde for each element depending on tuning state
+        
+        for n in range(indices.size):
+            if n == 0:
+                # A = self.A0
+                A = np.eye(2)
+            else:
+                A = A @ Ai[i,:,:]
+        return self.make_S(A[None,:,:])[0,:,:]
 
     def compute_fields(self, tuning_state, feed_position='left'):
         '''
@@ -160,8 +176,8 @@ class RectangularWaveguide(Antenna):
         self.element = element
         if self.element is not None:
             if self.element.alpha_m is None:
-                alpha_mx = (1j*self.params['a']*self.params['b']*self.params['beta_g']) / (2*self.params['k']) * (self.element.S21 + self.element.S11 - 1)
-                alpha_ey = (1j*self.params['a']*self.params['b']) / (2*self.params['beta_g']) * (self.element.S21 + self.element.S11 - 1)
+                alpha_mx = (1j*self.params['a']*self.params['b']) / (2*self.params['k']**2) * (self.element.S21 - self.element.S11 - 1)
+                alpha_ey = (1j*self.params['a']*self.params['b']*self.params['beta_g']) / (2*self.params['k']**2) * (self.element.S21 + self.element.S11 - 1)
                 self.element.alpha_m = np.array([[alpha_mx, np.zeros_like(alpha_mx), np.zeros_like(alpha_mx)],
                                                  [np.zeros_like(alpha_mx), np.zeros_like(alpha_mx), np.zeros_like(alpha_mx)],
                                                  [np.zeros_like(alpha_mx), np.zeros_like(alpha_mx), np.zeros_like(alpha_mx)]])
