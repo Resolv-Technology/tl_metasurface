@@ -40,30 +40,7 @@ class Element:
             self.f = 10E9
         
         if filepath_list is not None:
-            self.S11 = []
-            self.S12 = []
-            self.S21 = []
-            self.S22 = []
-            for filepath in filepath_list:
-                filetype = filepath.split('.')[-1]
-                if filetype == 's2p' or filetype == 's3p':
-                    touchstone = rf.Network(filepath)
-                    f_index = np.argmin(np.abs(touchstone.f - self.f))
-                    self.S11.append(touchstone.s11.s[f_index,0,0])
-                    self.S21.append(touchstone.s21.s[f_index,0,0])
-                    try:
-                        self.S12.append(touchstone.s12.s[f_index,0,0])
-                        self.S22.append(touchstone.s22.s[f_index,0,0])
-                    except:
-                        self.S12.append(touchstone.s21.s[f_index,0])
-                        self.S22.append(touchstone.s11.s[f_index,0])
-                else:
-                    raise ValueError('Filetype not supported. Must supply Touchstone file.')
-            self.S11 = np.array(self.S11)
-            self.S12 = np.array(self.S12)
-            self.S21 = np.array(self.S21)
-            self.S22 = np.array(self.S22)
-            self.S = np.transpose(np.array([[self.S11, self.S12], [self.S21, self.S22]]), (2, 0, 1))
+            self.load_S(filepath_list)
             self.alpha_m = None
             self.alpha_e = None
         else:
@@ -96,6 +73,32 @@ class Element:
             self.S12 = None
             self.S21 = None
             self.S22 = None
+
+    def load_S(self, filepath_list):
+        self.S11 = []
+        self.S12 = []
+        self.S21 = []
+        self.S22 = []
+        for filepath in filepath_list:
+            filetype = filepath.split('.')[-1]
+            if filetype == 's2p' or filetype == 's3p':
+                touchstone = rf.Network(filepath)
+                f_index = np.argmin(np.abs(touchstone.f - self.f))
+                self.S11.append(touchstone.s11.s[f_index,0,0])
+                self.S21.append(touchstone.s21.s[f_index,0,0])
+                if np.count_nonzero(touchstone.s12.s) > 0:
+                    self.S12.append(touchstone.s12.s[f_index,0,0])
+                    self.S22.append(touchstone.s22.s[f_index,0,0])
+                else:
+                    self.S12.append(touchstone.s21.s[f_index,0,0])
+                    self.S22.append(touchstone.s11.s[f_index,0,0])
+            else:
+                raise ValueError('Filetype not supported. Must supply Touchstone file.')
+        self.S11 = np.array(self.S11)
+        self.S12 = np.array(self.S12)
+        self.S21 = np.array(self.S21)
+        self.S22 = np.array(self.S22)
+        self.S = np.transpose(np.array([[self.S11, self.S12], [self.S21, self.S22]]), (2, 0, 1))
 
     def rotate(self):
         '''Rotates element polarizability tensors around the y axis by angle self.rotation.'''

@@ -40,6 +40,12 @@ class Antenna():
         D = ( (1 - S[:,0,0])*(1 + S[:,1,1]) + S[:,0,1]*S[:,1,0] ) / (2*S[:,1,0])
         return np.transpose(np.array([[A, B], [C, D]]), (2, 0, 1))
     
+    def make_A0(self, delta_z0):
+        '''Defines ABCD matrix for free space propagation.'''
+        A0 = np.array([[np.cosh(self.params['gamma']*delta_z0), self.params['Z']*np.sinh(self.params['gamma']*delta_z0)],
+                       [1/self.params['Z']*np.sinh(self.params['gamma']*delta_z0), np.cosh(self.params['gamma']*delta_z0)]])
+        return A0
+    
     def make_S(self, A):
         '''Converts ABCD matrix to scattering matrix.'''
         denominator = A[:,0,0] + A[:,0,1]/self.params['Z'] + A[:,1,0]*self.params['Z'] + A[:,1,1]
@@ -58,7 +64,6 @@ class Antenna():
 
         for n in range(indices.size):
             if n == 0:
-                # An = self.A0
                 An = np.eye(2)
             else:
                 An = np.eye(2)
@@ -196,17 +201,19 @@ class RectangularWaveguide(Antenna):
                 self.element.S22 = self.element.S11
                 self.element.S = np.transpose(np.array([[self.element.S11, self.element.S12], [self.element.S21, self.element.S22]]), (2, 0, 1))
 
-        self.element.rotate()
+            self.element.rotate()
         
-        self.element.x_offset = kwargs.get('x_offset', 0)
-        if np.array(self.element.x_offset).ndim == 0:
-            self.element.x_offset = self.element.x_offset * np.ones(self.params['N'])
-        self.element.x = self.params['a']/2 + self.element.x_offset
+            self.element.x_offset = kwargs.get('x_offset', 0)
+            if np.array(self.element.x_offset).ndim == 0:
+                self.element.x_offset = self.element.x_offset * np.ones(self.params['N'])
+            self.element.x = self.params['a']/2 + self.element.x_offset
 
-        self.element.A = self.make_ABCD(self.element.S)
-        delta_z0 = self.params['delta_z'] - self.element.delta_z_element        # defining distance between elements for general nonzero element size
-        self.A0 = np.array([[np.cosh(self.params['gamma']*delta_z0), self.params['Z']*np.sinh(self.params['gamma']*delta_z0)],
-                            [1/self.params['Z']*np.sinh(self.params['gamma']*delta_z0), np.cosh(self.params['gamma']*delta_z0)]])
+            self.element.A = self.make_ABCD(self.element.S)
+            delta_z0 = self.params['delta_z'] - self.element.delta_z_element        # defining distance between elements for general nonzero element size
+        else:
+            delta_z0 = self.params['delta_z']
+
+        self.A0 = self.make_A0(delta_z0)
                 
     def calculate_parameters(self):
 
