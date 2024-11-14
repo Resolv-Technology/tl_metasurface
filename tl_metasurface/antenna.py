@@ -193,6 +193,8 @@ class RectangularWaveguide(Antenna):
                 self.element.alpha_e = np.transpose(self.element.alpha_e, (2, 0, 1))
 
             elif self.element.S21 is None:
+                if self.element.type == 'analytic':
+                    self.element.alpha_m = self.element.alpha_m / (1 + 1j*self.element.alpha_m * ( self.params['beta_g']/(self.params['a']*self.params['b']) + (self.params['k']**3)/(3*np.pi)))
                 self.element.S11 = ( - 1j*(self.params['k']**2*self.element.alpha_e[:,1,1])/(self.params['a']*self.params['b']*self.params['beta_g'])
                                      + 1j*(self.params['beta_g']*self.element.alpha_m[:,0,0])/(self.params['a']*self.params['b']) )
                 self.element.S21 = ( 1 - 1j*(self.params['k']**2*self.element.alpha_e[:,1,1])/(self.params['a']*self.params['b']*self.params['beta_g'])

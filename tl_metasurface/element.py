@@ -40,10 +40,12 @@ class Element:
             self.f = 10E9
         
         if filepath_list is not None:
+            self.type = 'touchstone'
             self.load_S(filepath_list)
             self.alpha_m = None
             self.alpha_e = None
         else:
+            self.type = 'analytic'
             self.f0 = f0
             if alpha_m is None:
                 if self.f0 is None:
