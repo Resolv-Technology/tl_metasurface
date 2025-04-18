@@ -41,7 +41,7 @@ class Antenna():
         return np.transpose(np.array([[A, B], [C, D]]), (2, 0, 1))
     
     def make_A0(self, delta_z0):
-        '''Defines ABCD matrix for free space propagation.'''
+        '''Defines ABCD matrix for unperturbed transmission line propagation.'''
         A0 = np.array([[np.cosh(self.params['gamma']*delta_z0), self.params['Z']*np.sinh(self.params['gamma']*delta_z0)],
                        [1/self.params['Z']*np.sinh(self.params['gamma']*delta_z0), np.cosh(self.params['gamma']*delta_z0)]])
         return A0
