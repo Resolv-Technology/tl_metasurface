@@ -89,6 +89,7 @@ class Antenna():
     
     def compute_antenna_S(self, tuning_state):
         '''Calculates scattering matrix for antenna array.'''
+        #### NEED TO FIX THIS
         indices = np.arange(self.params['N'])
         Ai = np.empty((indices.size, 2, 2), dtype=complex)
         for i in range(indices.size):
@@ -140,6 +141,36 @@ class Antenna():
         self.m_m = self.element.alpha_m[tuning_state,:,:] @ self.H[:,:,None]
         self.m_e = self.m_e[:,:,0]
         self.m_m = self.m_m[:,:,0]
+
+    def propagate(self, r_target):
+        '''
+        Numerically propagates computed dipoles to target points in the antenna near field.
+        '''
+        R_vec = r_target[None,:,:] - np.stack((np.zeros_like(self.z), np.zeros_like(self.z), self.z), axis=1)[:,None,:]
+        R_norm = np.linalg.norm(R_vec, axis=2, keepdims=True)
+        R_hat = R_vec / R_norm
+        k = 2*np.pi*self.params['f'] / C
+        
+        G1 = -(1 + 1j*k*R_norm - k**2 * R_norm**2)/(R_norm**3)
+        G2 = (3 + 3*1j*k*R_norm - k**2 * R_norm**2)/(R_norm**5)
+        
+        if bool(np.any(self.m_m)):
+            J_m = (1j*2*np.pi*self.params['f'] * MU_0 * self.m_m)[:,None,:]
+            E_F_integrand = ( (-1/(4*np.pi)) 
+                            * np.cross(J_m, R_hat, axisa=2, axisb=2, axisc=2)
+                            * (1 + 1j*k*R_norm)/R_norm**2
+                            * np.exp(-1j*k*R_norm) )
+            E_F = np.trapz(E_F_integrand, self.z, axis=0)
+        
+        if bool(np.any(self.m_e)):
+            J_e = (1j*2*np.pi*self.params['f'] * self.m_e)[:,None,:]
+            E_A_integrand = ( (-1j*Z_0/(4*np.pi*k))
+                                * (G1 * J_e + 
+                                   G2 * R_vec * np.sum(R_vec * J_e, axis=2, keepdims=True))
+                                * np.exp(-1j*k*R_norm) )
+            E_A = np.trapz(E_A_integrand, self.z, axis=0)
+            
+        return E_A + E_F
     
     def calculate_parameters(self):
         return
